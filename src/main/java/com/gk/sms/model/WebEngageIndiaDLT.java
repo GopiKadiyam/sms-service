@@ -1,0 +1,13 @@
+package com.gk.sms.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class WebEngageIndiaDLT {
+    private String contentTemplateId;
+    private String principalEntityId;
+}
