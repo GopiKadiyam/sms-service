@@ -25,7 +25,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class MessageRequest{
+public class MessageRequest {
     private String msgId;
     @NotNull(message = "'country' field is mandatory and cannot be null or empty. The value should be in IN,INTL ")
     private Country country;
@@ -53,15 +53,13 @@ public class MessageRequest{
     private String crmMsgId;
     private String webEngageVersion;
     private CRMType crmMsgType;
+    private String msgGroupId;
+    private Integer smsLength;
+    private Integer credits;
     private LocalDateTime smsSentOn;
+
+    private UpdateMsgReq updateMsgReq;
 
     private KafkaMsgType kafkaMsgType;
     private MsgStatus msgStatus;
-
-    private String statusJson;
-    private String type;
-    private String pId;
-    private String smscId;
-    private String tm;
-    private String dlrUrl;
 }

@@ -74,13 +74,10 @@ public class CommonController {
     public ResponseEntity<?> redirectUrl(
             @PathVariable String senderId,
             @PathVariable String shortUrlKey) {
-        log.info("GOPIII");
-        //String targetUrl = "https://www.callicoder.com/hibernate-spring-boot-jpa-one-to-one-mapping-example/";
         ShortenUrlEntity entity = shortenUrlRepository.findBySenderIdAndShortUrlKeyAndActiveFlag(senderId, shortUrlKey, true)
                 .orElseThrow(() -> new EntityNotFoundException("", "no link present with senderid :" + senderId + " and token :" + shortUrlKey));
         HttpHeaders headers = new HttpHeaders();
         headers.add("Location", UrlEncoderUtils.decodeURL(entity.getRedirectUrl()));
-
         return new ResponseEntity<>(headers, HttpStatus.FOUND); // 302 redirect
     }
 
@@ -101,7 +98,7 @@ public class CommonController {
         entity.setActiveFlag(request.isActiveFlag());
         entity.setComments(request.getComments());
         entity = shortenUrlRepository.save(entity);
-        return ResponseEntity.ok(httpRequest.getRequestURI() + "/" + request.getSender() + "/" + entity.getShortUrlKey());
+        return ResponseEntity.ok(entity.getShortUrlKey());
     }
 
     public String generateUniqueShortUrlKey() {
