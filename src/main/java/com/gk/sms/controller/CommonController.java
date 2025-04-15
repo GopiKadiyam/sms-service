@@ -21,6 +21,7 @@ import com.gk.sms.repository.UserWiseAPIKeyRepository;
 import com.gk.sms.repository.UserWiseServiceTypeRepository;
 import com.gk.sms.repository.UserWiseWebhookRepository;
 import com.gk.sms.utils.common.ShortUrlKeyGenerator;
+import com.gk.sms.utils.common.UrlEncoderUtils;
 import com.gk.sms.utils.enums.ApiKeyValidity;
 import com.gk.sms.utils.enums.CRMType;
 import com.gk.sms.utils.enums.ServiceType;
@@ -78,7 +79,7 @@ public class CommonController {
         ShortenUrlEntity entity = shortenUrlRepository.findBySenderIdAndShortUrlKeyAndActiveFlag(senderId, shortUrlKey, true)
                 .orElseThrow(() -> new EntityNotFoundException("", "no link present with senderid :" + senderId + " and token :" + shortUrlKey));
         HttpHeaders headers = new HttpHeaders();
-        headers.add("Location", entity.getRedirectUrl());
+        headers.add("Location", UrlEncoderUtils.decodeURL(entity.getRedirectUrl()));
 
         return new ResponseEntity<>(headers, HttpStatus.FOUND); // 302 redirect
     }
@@ -96,7 +97,7 @@ public class CommonController {
         ShortenUrlEntity entity = new ShortenUrlEntity();
         entity.setSenderId(request.getSender());
         entity.setShortUrlKey(shortUrlKey != null ? shortUrlKey : generateUniqueShortUrlKey());
-        entity.setRedirectUrl(request.getDestinationUrl());
+        entity.setRedirectUrl(UrlEncoderUtils.encodeURL(request.getDestinationUrl()));
         entity.setActiveFlag(request.isActiveFlag());
         entity.setComments(request.getComments());
         entity = shortenUrlRepository.save(entity);
