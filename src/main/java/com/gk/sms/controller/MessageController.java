@@ -1,6 +1,7 @@
 package com.gk.sms.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gk.sms.entities.TemplateEntity;
 import com.gk.sms.entities.UserEntity;
 import com.gk.sms.entities.UserWiseWebhookEntity;
 import com.gk.sms.exception.AuthenticationException;
@@ -10,6 +11,9 @@ import com.gk.sms.model.MessageRequest;
 import com.gk.sms.model.MtAdapterMsgReq;
 import com.gk.sms.model.MtAdapterMsgRes;
 import com.gk.sms.model.MtAdapterMsgResWrapper;
+import com.gk.sms.model.MtAdapterTemplateMsgReq;
+import com.gk.sms.model.MtAdapterTemplateMsgResp;
+import com.gk.sms.model.MtAdapterTemplateMsgRespWrapper;
 import com.gk.sms.model.UpdateMsgReq;
 import com.gk.sms.model.WebEngageIndiaDLT;
 import com.gk.sms.model.WebEngageMetadata;
@@ -17,6 +21,8 @@ import com.gk.sms.model.WebEngageResponse;
 import com.gk.sms.model.WebEngageSMSData;
 import com.gk.sms.model.WebEngageSMSRequest;
 import com.gk.sms.producer.MsgRequestsProducer;
+import com.gk.sms.repository.SenderRepository;
+import com.gk.sms.repository.TemplateRepository;
 import com.gk.sms.repository.UserMessagesRepository;
 import com.gk.sms.repository.UserRepository;
 import com.gk.sms.utils.enums.CRMType;
@@ -41,6 +47,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.gk.sms.utils.enums.Country.IN;
@@ -62,6 +69,10 @@ public class MessageController {
     private MsgRequestsProducer msgProducer;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private SenderRepository senderRepository;
+    @Autowired
+    private TemplateRepository templateRepository;
 
     @PostMapping("/sms/send")
     public ResponseEntity<String> sendSms(@RequestBody @Valid MessageRequest request,
@@ -220,10 +231,80 @@ public class MessageController {
     }
 
     @PostMapping("/mt-adapter/template/sms/send")
-    public ResponseEntity<List<String>> sendSmsAsPerTemplate(@RequestBody @Valid MtAdapterMsgReq request,
-                                                             @RequestHeader("tenantId") String tenantId,
-                                                             @RequestHeader("apiKey") String apiKey) {
-        return null;
+    public ResponseEntity<MtAdapterTemplateMsgRespWrapper> sendSmsAsPerTemplate(@RequestBody @Valid MtAdapterTemplateMsgReq request,
+                                                                                @RequestHeader("tenantId") String tenantId,
+                                                                                @RequestHeader("apiKey") String apiKey) {
+        UserEntity userEntity = userRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("tenantId", "tenantId -" + tenantId + " not found "));
+        userEntity.getUserApiKeys().stream()
+                .filter(aKey -> apiKey.equalsIgnoreCase(aKey.getApiKey()) && aKey.isActiveFlag())
+                .findFirst()
+                .orElseThrow(() -> new AuthenticationException("apiKey", " apiKey - " + apiKey + " is not valid for TenantId - " + tenantId));
+        List<String> toList = request.getRecipient().getTo();
+        String msgGroupId = generateUniqueMsgGroupId();
+        MtAdapterTemplateMsgRespWrapper response = new MtAdapterTemplateMsgRespWrapper();
+        List<MtAdapterTemplateMsgResp> data = new ArrayList<>();
+        TemplateEntity templateEntity = templateRepository.findByName(request.getAlias()).
+                orElse(null);
+        if (templateEntity != null) {
+            for (String to : toList) {
+                MessageRequest messageRequest = new MessageRequest();
+                messageRequest.setMessageType(MessageType.A);
+                messageRequest.setTenantId(tenantId);
+                messageRequest.setMsgId(generateUniqueMsgId());
+                messageRequest.setMsgGroupId(msgGroupId);
+                messageRequest.setCountry(IN);
+                String service = request.getMeta().getService();
+                messageRequest.setServiceType(service.equalsIgnoreCase("T") ? TRANS : (service.equalsIgnoreCase("P") ? PROMO : null));
+                messageRequest.setFrom(templateEntity.getSender().getSenderId());
+                messageRequest.setTo(to);
+                messageRequest.setBody(renderTemplateBodyWithData(templateEntity.getTemplateBody(), request.getData()));
+                messageRequest.setTemplateId(templateEntity.getTemplateId());
+                messageRequest.setEntityId(templateEntity.getSender().getEntityId());
+//                messageRequest.setMetadata();
+                messageRequest.setCustomId(request.getMeta().getForeign_id());
+                messageRequest.setFlash(request.getMeta().getFlash() == 1 ? true : false);
+                messageRequest.setWebhookId((request.getMeta().getWebhook_id() != null && !request.getMeta().getWebhook_id().isBlank()) ? request.getMeta().getWebhook_id() : null);
+
+                messageRequest.setKafkaMsgType(KafkaMsgType.INSERT_MSG);
+                messageRequest.setMsgStatus(MsgStatus.CREATED);
+                messageRequest.setCrmMsgType(CRMType.MT_ADAPTER);
+                messageRequest.setSmsSentOn(LocalDateTime.now(ZoneOffset.UTC));
+
+                messageRequest.setSmsLength(messageRequest.getBody().length());
+                messageRequest.setCredits(getUnits(messageRequest.getBody(), messageRequest.getMessageType()));
+                messageRequest.setUpdateMsgReq(null);
+                boolean isNotValid = validateMsgReqWithoutThrowingException(messageRequest);
+                if (!isNotValid) {
+                    msgProducer.postInsertMsgToKafka(messageRequest, tenantId);
+                    MtAdapterTemplateMsgResp mtAdapterTemplateMsgResp = new MtAdapterTemplateMsgResp();
+                    mtAdapterTemplateMsgResp.setId(messageRequest.getMsgId());
+                    mtAdapterTemplateMsgResp.setChannel("0.023");
+                    mtAdapterTemplateMsgResp.setFrom(messageRequest.getFrom());
+                    mtAdapterTemplateMsgResp.setTo(messageRequest.getTo());
+                    mtAdapterTemplateMsgResp.setCredits(messageRequest.getCredits());
+                    mtAdapterTemplateMsgResp.setForeign_id(request.getMeta().getForeign_id());
+                    mtAdapterTemplateMsgResp.setStatus("AWAITING-DLR");
+                    mtAdapterTemplateMsgResp.setCreated_at("2025-04-15 16:26:59");
+
+                    data.add(mtAdapterTemplateMsgResp);
+                }
+            }
+        } else {
+            log.info("templateName: {} , is not found ", request.getAlias());
+        }
+        int count = data != null ? data.size() : 0;
+        response.setMessage(count + " numbers accepted for delivery");
+        response.setStatus("OK");
+        response.setData(data);
+        return ResponseEntity.ok(response);
+    }
+
+    private String renderTemplateBodyWithData(String templateBody, Map<String, String> variables) {
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            templateBody = templateBody.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return templateBody;
     }
 
     public String generateUniqueMsgId() {
