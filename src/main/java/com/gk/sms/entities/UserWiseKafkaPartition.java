@@ -1,7 +1,6 @@
 package com.gk.sms.entities;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -18,19 +17,15 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "user_wise_service")
-public class UserWiseServiceTypeEntity {
+@Table(name = "user_wise_kafka_partitions")
+public class UserWiseKafkaPartition {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
-    @ManyToOne
-    @JoinColumn(name = "service_type_id", nullable = false)
-    private ServiceTypeEntity serviceType;
-    @ManyToOne
-    @JoinColumn(name = "smsc_id", nullable = false)
-    private SMSCEntity smsc;
+    private UserAccountEntity user;
+    private int partitionNum;
+
 }

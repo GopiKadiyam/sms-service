@@ -4,7 +4,6 @@ import com.gk.sms.utils.enums.ApiKeyValidity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -23,14 +22,14 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "user_wise_api_key")
+@Table(name = "user_wise_api_keys")
 public class UserWiseAPIKeyEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
+    private UserAccountEntity user;
     @NotEmpty
     private String apiKey;
     @NotNull

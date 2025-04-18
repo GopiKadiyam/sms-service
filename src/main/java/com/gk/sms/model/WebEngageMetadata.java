@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -14,8 +15,8 @@ import java.util.Map;
 @AllArgsConstructor
 public class WebEngageMetadata {
     private String campaignType;
-    @JsonDeserialize(using = CustomWebEngageLocalDateTimeDeserializer.class)
-    private LocalDateTime timestamp;
+    //@JsonDeserialize(using = CustomWebEngageLocalDateTimeDeserializer.class)
+    private String timestamp;
     private String messageId;
     private Map<String, String> custom;
     private WebEngageIndiaDLT indiaDLT;

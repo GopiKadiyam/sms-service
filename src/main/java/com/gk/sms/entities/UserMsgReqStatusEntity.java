@@ -1,6 +1,5 @@
 package com.gk.sms.entities;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.gk.sms.utils.enums.MsgStatus;
 import com.gk.sms.utils.enums.SMSStatus;
 import jakarta.persistence.Column;
@@ -19,30 +18,27 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "user_messages_info")
-public class UserMessagesInfoEntity {
+@Table(name = "user_msg_req_status")
+public class UserMsgReqStatusEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "msg_id", nullable = false)
-    private UserMessagesEntity userMessage;
+    private UserMsgReqEntity userMessage;
     private String msgGroupId;
     @Column(name = "user_id", nullable = false)
     private String userId;
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "GMT")
-    private LocalDateTime smsSentOn;
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "GMT")
-    private LocalDateTime dlrSentOn;
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "GMT")
-    private LocalDateTime dlrDeliveredOn;
+    private Instant smsSentOn;
+    private Instant  dlrSentOn;
+    private Instant  dlrDeliveredOn;
     @Enumerated(EnumType.STRING)
     private SMSStatus dlrStatus;
     private String dlrStatusCode;

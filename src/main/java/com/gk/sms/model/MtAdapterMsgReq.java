@@ -17,8 +17,8 @@ public class MtAdapterMsgReq {
     private List<String> to;
     private String message;
     private String service;
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ssX")
-    private OffsetDateTime time;
+    //@JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ssX")
+    private String time;
     private String type;
     private int flash;
     private String custom;

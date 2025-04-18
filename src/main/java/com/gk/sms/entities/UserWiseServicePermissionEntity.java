@@ -1,7 +1,6 @@
 package com.gk.sms.entities;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -18,15 +17,20 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "tenant_partition")
-public class TenantToPartition{
+@Table(name = "user_wise_service_permissions")
+public class UserWiseServicePermissionEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
-    private int partitionNum;
+    private UserAccountEntity user;
+    @ManyToOne
+    @JoinColumn(name = "service_type_id", nullable = false)
+    private MsgServiceTypeEntity serviceType;
+    @ManyToOne
+    @JoinColumn(name = "smsc_id", nullable = false)
+    private SMSCEntity smsc;
 
 }

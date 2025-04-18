@@ -23,14 +23,16 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "service_type")
-public class ServiceTypeEntity{
+@Table(name = "message_service_types")
+public class MsgServiceTypeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @NotBlank
     @Size(max = 25)
     private String name;
-    @OneToMany(mappedBy = "serviceType",fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<UserWiseServiceTypeEntity> users = new ArrayList<>();
+
+//    @OneToMany(mappedBy = "serviceType",fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+//    private List<UserWiseServiceTypeEntity> users = new ArrayList<>();
+
 }

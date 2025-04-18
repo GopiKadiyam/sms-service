@@ -22,8 +22,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "user_wise_webhook")
-public class UserWiseWebhookEntity {
+@Table(name = "user_wise_webhook_registry")
+public class UserWiseWebhookRegistryEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,7 +31,7 @@ public class UserWiseWebhookEntity {
     private String webhookId;
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity user;
+    private UserAccountEntity user;
     @NotEmpty
     private String webhookUrl;
     @NotNull

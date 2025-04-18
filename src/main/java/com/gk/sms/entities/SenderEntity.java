@@ -30,11 +30,9 @@ public class SenderEntity {
     @Column(name = "id", updatable = false, nullable = false, length = 36) // Store as string
     private String id;
     @NotBlank
-    @Size(max = 50)
     @Column(name = "sender_id",unique = true)
     private String senderId;
     @NotBlank
-    @Size(max = 500)
     private String description;
     @Enumerated(EnumType.STRING)
     private Country country;
@@ -42,7 +40,6 @@ public class SenderEntity {
     @Column(name = "service_type")
     private ServiceType serviceType;
     @NotBlank
-    @Size(max = 50)
     @Column(name = "entity_id")
     private String entityId;
     @Column(name = "is_open")

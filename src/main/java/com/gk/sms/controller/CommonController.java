@@ -1,20 +1,24 @@
 package com.gk.sms.controller;
 
 import com.gk.sms.entities.SMSCEntity;
-import com.gk.sms.entities.ServiceTypeEntity;
-import com.gk.sms.entities.ShortenUrlEntity;
-import com.gk.sms.entities.TenantToPartition;
-import com.gk.sms.entities.UserEntity;
+import com.gk.sms.entities.MsgServiceTypeEntity;
+import com.gk.sms.entities.SenderEntity;
+import com.gk.sms.entities.ShortenUrlRegistryEntity;
+import com.gk.sms.entities.TemplateEntity;
+import com.gk.sms.entities.UserWiseKafkaPartition;
+import com.gk.sms.entities.UserAccountEntity;
 import com.gk.sms.entities.UserWiseAPIKeyEntity;
-import com.gk.sms.entities.UserWiseServiceTypeEntity;
-import com.gk.sms.entities.UserWiseWebhookEntity;
+import com.gk.sms.entities.UserWiseServicePermissionEntity;
+import com.gk.sms.entities.UserWiseWebhookRegistryEntity;
 import com.gk.sms.exception.EntityNotFoundException;
 import com.gk.sms.exception.InvalidRequestException;
 import com.gk.sms.model.ShortenUrlRequest;
 import com.gk.sms.model.UserWiseApiKey;
 import com.gk.sms.repository.SMSCRepository;
+import com.gk.sms.repository.SenderRepository;
 import com.gk.sms.repository.ServiceTypeRepository;
 import com.gk.sms.repository.ShortenUrlRepository;
+import com.gk.sms.repository.TemplateRepository;
 import com.gk.sms.repository.TenantToPartitionRepository;
 import com.gk.sms.repository.UserRepository;
 import com.gk.sms.repository.UserWiseAPIKeyRepository;
@@ -37,9 +41,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -69,12 +73,16 @@ public class CommonController {
     private TenantToPartitionRepository tenantToPartitionRepository;
     @Autowired
     private ShortenUrlRepository shortenUrlRepository;
+    @Autowired
+    private SenderRepository senderRepository;
+    @Autowired
+    private TemplateRepository templateRepository;
 
     @GetMapping("/{senderId}/{shortUrlKey}")
     public ResponseEntity<?> redirectUrl(
             @PathVariable String senderId,
             @PathVariable String shortUrlKey) {
-        ShortenUrlEntity entity = shortenUrlRepository.findBySenderIdAndShortUrlKeyAndActiveFlag(senderId, shortUrlKey, true)
+        ShortenUrlRegistryEntity entity = shortenUrlRepository.findBySenderIdAndShortUrlKeyAndActiveFlag(senderId, shortUrlKey, true)
                 .orElseThrow(() -> new EntityNotFoundException("", "no link present with senderid :" + senderId + " and token :" + shortUrlKey));
         HttpHeaders headers = new HttpHeaders();
         headers.add("Location", UrlEncoderUtils.decodeURL(entity.getRedirectUrl()));
@@ -91,7 +99,7 @@ public class CommonController {
             throw new InvalidRequestException("token", "token " + request.getToken() + " is already present, use another one");
         }
 
-        ShortenUrlEntity entity = new ShortenUrlEntity();
+        ShortenUrlRegistryEntity entity = new ShortenUrlRegistryEntity();
         entity.setSenderId(request.getSender());
         entity.setShortUrlKey(shortUrlKey != null ? shortUrlKey : generateUniqueShortUrlKey());
         entity.setRedirectUrl(UrlEncoderUtils.encodeURL(request.getDestinationUrl()));
@@ -110,9 +118,9 @@ public class CommonController {
     }
 
     @PostMapping("/service-types/save")
-    public List<Long> saveServiceTypes(@RequestBody List<ServiceTypeEntity> serviceTypes) {
+    public List<Long> saveServiceTypes(@RequestBody List<MsgServiceTypeEntity> serviceTypes) {
         return serviceTypeRepository.saveAll(serviceTypes).stream()
-                .map(ServiceTypeEntity::getId)
+                .map(MsgServiceTypeEntity::getId)
                 .collect(Collectors.toList());
     }
 
@@ -124,13 +132,13 @@ public class CommonController {
     }
 
     @PostMapping("/users/save")
-    public List<String> saveUsers(@RequestBody List<UserEntity> users) {
-        List<UserEntity> encodedUsers = users.stream().map(u -> {
+    public List<String> saveUsers(@RequestBody List<UserAccountEntity> users) {
+        List<UserAccountEntity> encodedUsers = users.stream().map(u -> {
             u.setPassword(passwordEncoder.encode(u.getPassword()));
             return u;
         }).toList();
         return userRepository.saveAll(encodedUsers).stream()
-                .map(UserEntity::getId)
+                .map(UserAccountEntity::getId)
                 .collect(Collectors.toList());
     }
 
@@ -140,16 +148,16 @@ public class CommonController {
                 .map(ServiceType::getValue)
                 .collect(Collectors.toList());
         List<String> smscList = userWiseApiKeys.stream().map(UserWiseApiKey::getSmsc).collect(Collectors.toList());
-        Map<String, ServiceTypeEntity> serviceTypeEntityMap = serviceTypeRepository.findAllByNameIn(serviceTypes)
-                .stream().collect(Collectors.toMap(ServiceTypeEntity::getName, st -> st));
+        Map<String, MsgServiceTypeEntity> serviceTypeEntityMap = serviceTypeRepository.findAllByNameIn(serviceTypes)
+                .stream().collect(Collectors.toMap(MsgServiceTypeEntity::getName, st -> st));
         Map<String, SMSCEntity> smscEntityMap = smscRepository.findAllByNameIn(smscList)
                 .stream().collect(Collectors.toMap(SMSCEntity::getName, smsc -> smsc));
 
         return userWiseApiKeys.stream().map(uak -> {
-            UserWiseServiceTypeEntity ust = new UserWiseServiceTypeEntity();
-            UserEntity userEntity = userRepository.findByUsername(uak.getUserId())
+            UserWiseServicePermissionEntity ust = new UserWiseServicePermissionEntity();
+            UserAccountEntity userAccountEntity = userRepository.findByUsername(uak.getUserId())
                     .orElseThrow(() -> new EntityNotFoundException("userId", uak.getUserId() + " not found"));
-            ust.setUser(userEntity);
+            ust.setUser(userAccountEntity);
             ust.setServiceType(serviceTypeEntityMap.get(uak.getServiceType().toString()));
             ust.setSmsc(smscEntityMap.get(uak.getSmsc()));
             return userWiseServiceTypeRepository.save(ust).getId();
@@ -158,11 +166,11 @@ public class CommonController {
 
     @PostMapping("/user/api-key/save")
     public String saveUserApiKeys(@RequestBody Map<String, String> request) {
-        UserEntity userEntity = userRepository.findByUsername(request.get("username"))
+        UserAccountEntity userAccountEntity = userRepository.findByUsername(request.get("username"))
                 .orElseThrow(() -> new EntityNotFoundException("userId", request.get("userName") + " not found"));
 
         UserWiseAPIKeyEntity userWiseAPIKeyEntity = new UserWiseAPIKeyEntity();
-        userWiseAPIKeyEntity.setUser(userEntity);
+        userWiseAPIKeyEntity.setUser(userAccountEntity);
         userWiseAPIKeyEntity.setApiKey(generateApiKey());
         userWiseAPIKeyEntity.setValidity(ApiKeyValidity.QUARTERLY);
         userWiseAPIKeyEntity.setActiveFlag(true);
@@ -173,36 +181,41 @@ public class CommonController {
         String apiKey;
         do {
             apiKey = UUID.randomUUID().toString().replace("-", "");
-            ;
         } while (userWiseAPIKeyRepository.existsByApiKey(apiKey));
         return apiKey;
     }
 
     @PostMapping("/user/webhook/save")
-    public String saveUserWebhook(@RequestBody Map<String, String> request) {
-        UserEntity userEntity = userRepository.findByUsername(request.get("username"))
-                .orElseThrow(() -> new EntityNotFoundException("userId", request.get("userName") + " not found"));
+    public List<String> saveUserWebhook(@RequestBody List<Map<String, String>> requestList) {
+        List<String> response = new ArrayList<>();
+        requestList.forEach(request -> {
+            UserAccountEntity userAccountEntity = userRepository.findByUsername(request.get("username"))
+                    .orElseThrow(() -> new EntityNotFoundException("userId", request.get("userName") + " not found"));
 
-        UserWiseWebhookEntity webhookEntity = new UserWiseWebhookEntity();
-        webhookEntity.setUser(userEntity);
-        webhookEntity.setWebhookId(generateWebhookId());
-        webhookEntity.setWebhookUrl(request.get("url"));
-        webhookEntity.setActiveFlag(true);
-        webhookEntity.setCrmType(CRMType.fromValue(request.get("crmType")));
-
-        return userWiseWebhookRepository.save(webhookEntity).getWebhookId();
+            UserWiseWebhookRegistryEntity webhookEntity = new UserWiseWebhookRegistryEntity();
+            webhookEntity.setUser(userAccountEntity);
+            webhookEntity.setWebhookId(generateWebhookId());
+            webhookEntity.setWebhookUrl(request.get("url"));
+            webhookEntity.setActiveFlag(true);
+            webhookEntity.setCrmType(CRMType.fromValue(request.get("crmType")));
+            webhookEntity = userWiseWebhookRepository.save(webhookEntity);
+            response.add(webhookEntity != null ? webhookEntity.getWebhookId() : null);
+        });
+        return response;
     }
 
     @PostMapping("/user/kafka/partition")
-    public void mapUserWiseKafkaTopiPartition(@RequestBody Map<String, String> request) {
-        UserEntity userEntity = userRepository.findByUsername(request.get("username"))
-                .orElseThrow(() -> new EntityNotFoundException("userId", request.get("userName") + " not found"));
+    public void mapUserWiseKafkaTopiPartition(@RequestBody List<Map<String, String>> requestList) {
+        requestList.forEach(request -> {
+            UserAccountEntity userAccountEntity = userRepository.findByUsername(request.get("username"))
+                    .orElseThrow(() -> new EntityNotFoundException("userId", request.get("userName") + " not found"));
 
-        TenantToPartition tenantToPartition = new TenantToPartition();
-        tenantToPartition.setUser(userEntity);
-        tenantToPartition.setPartitionNum(Integer.parseInt(request.get("partition")));
+            UserWiseKafkaPartition userWiseKafkaPartition = new UserWiseKafkaPartition();
+            userWiseKafkaPartition.setUser(userAccountEntity);
+            userWiseKafkaPartition.setPartitionNum(Integer.parseInt(request.get("partition")));
 
-        tenantToPartitionRepository.save(tenantToPartition);
+            tenantToPartitionRepository.save(userWiseKafkaPartition);
+        });
     }
 
     private String generateWebhookId() {
@@ -211,5 +224,19 @@ public class CommonController {
             apiKey = UUID.randomUUID().toString();
         } while (userWiseWebhookRepository.existsByWebhookId(apiKey));
         return apiKey;
+    }
+
+    @PostMapping("/sender")
+    public String createSender(@RequestBody SenderEntity senderEntity) {
+        return senderRepository.save(senderEntity).getSenderId();
+    }
+
+    @PostMapping("/template")
+    public String createTemplate(@RequestBody TemplateEntity templateEntity,
+                                 @RequestHeader("sender-id")String senderId) {
+        SenderEntity sender=senderRepository.findBySenderId(senderId)
+                .orElseThrow(()-> new EntityNotFoundException("",""));
+        templateEntity.setSender(sender);
+        return templateRepository.save(templateEntity).getTemplateId();
     }
 }

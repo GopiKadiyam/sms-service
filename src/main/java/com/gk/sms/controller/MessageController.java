@@ -2,8 +2,8 @@ package com.gk.sms.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gk.sms.entities.TemplateEntity;
-import com.gk.sms.entities.UserEntity;
-import com.gk.sms.entities.UserWiseWebhookEntity;
+import com.gk.sms.entities.UserAccountEntity;
+import com.gk.sms.entities.UserWiseWebhookRegistryEntity;
 import com.gk.sms.exception.AuthenticationException;
 import com.gk.sms.exception.EntityNotFoundException;
 import com.gk.sms.exception.InvalidRequestException;
@@ -43,8 +43,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -78,20 +77,22 @@ public class MessageController {
     public ResponseEntity<String> sendSms(@RequestBody @Valid MessageRequest request,
                                           @RequestHeader("tenantId") String tenantId,
                                           @RequestHeader("apiKey") String apiKey) {
-        UserEntity userEntity = userRepository.findById(tenantId)
+        UserAccountEntity userAccountEntity = userRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("tenantId", "tenantId -" + tenantId + " not found "));
-        userEntity.getUserApiKeys().stream()
+        userAccountEntity.getUserApiKeys().stream()
                 .filter(aKey -> apiKey.equalsIgnoreCase(aKey.getApiKey()) && aKey.isActiveFlag())
                 .findFirst()
                 .orElseThrow(() -> new AuthenticationException("apiKey", " apiKey - " + apiKey + " is not valid for TenantId - " + tenantId));
         validateMsgReqAndThrowException(request);
-        userEntity.getUserServices().stream()
+        userAccountEntity.getUserServices().stream()
                 .filter(us -> us.getServiceType().getName().equalsIgnoreCase(request.getServiceType().getValue()))
                 .findFirst()
                 .orElseThrow(() -> new InvalidRequestException("serviceType", " serviceType - " + request.getServiceType() + " is not supported for TenantId " + tenantId));
         request.setMsgId(generateUniqueMsgId());
         request.setTenantId(tenantId);
-        request.setSmsSentOn(LocalDateTime.now(ZoneOffset.UTC));
+        request.setSmsLength(getLengthIgnoringNewlines(request.getBody()));
+        request.setCredits(getUnits(request.getBody(), request.getMessageType()));
+        request.setSmsSentOn(Instant.now());
         request.setKafkaMsgType(KafkaMsgType.INSERT_MSG);
         request.setMsgStatus(MsgStatus.CREATED);
         msgProducer.postInsertMsgToKafka(request, tenantId);
@@ -104,9 +105,9 @@ public class MessageController {
                                                                  @RequestHeader("apiKey") String apiKey) {
         WebEngageResponse response = new WebEngageResponse();
         try {
-            UserEntity userEntity = userRepository.findById(tenantId)
+            UserAccountEntity userAccountEntity = userRepository.findById(tenantId)
                     .orElseThrow(() -> new EntityNotFoundException("tenantId", "tenantId -" + tenantId + " not found "));
-            userEntity.getUserApiKeys().stream()
+            userAccountEntity.getUserApiKeys().stream()
                     .filter(aKey -> apiKey.equalsIgnoreCase(aKey.getApiKey()) && aKey.isActiveFlag())
                     .findFirst()
                     .orElseThrow(() -> new AuthenticationException("apiKey", " apiKey - " + apiKey + " is not valid for TenantId - " + tenantId));
@@ -122,18 +123,20 @@ public class MessageController {
             messageRequest.setFrom(smsData.getFromNumber1() != null ? smsData.getFromNumber1() : smsData.getFromNumber2());
             messageRequest.setTo(smsData.getToNumber());
             messageRequest.setBody(smsData.getBody());
+            messageRequest.setSmsLength(getLengthIgnoringNewlines(messageRequest.getBody()));
+            messageRequest.setCredits(getUnits(messageRequest.getBody(), messageRequest.getMessageType()));
             messageRequest.setTemplateId(indiaDLT.getContentTemplateId());
             messageRequest.setEntityId(indiaDLT.getPrincipalEntityId());
             messageRequest.setMetadata(metadata.getCustom());
             messageRequest.setFlash(false);
             messageRequest.setCrmMsgId(metadata.getMessageId());
             messageRequest.setWebEngageVersion(request.getVersion());
-            UserWiseWebhookEntity webhookEntity = userEntity.getUserWebhooks().stream().findFirst().orElse(null);
+            UserWiseWebhookRegistryEntity webhookEntity = userAccountEntity.getUserWebhooks().stream().findFirst().orElse(null);
             messageRequest.setWebhookId(webhookEntity != null ? webhookEntity.getWebhookId() : null);
             messageRequest.setKafkaMsgType(KafkaMsgType.INSERT_MSG);
             messageRequest.setMsgStatus(MsgStatus.CREATED);
             messageRequest.setCrmMsgType(CRMType.WEB_ENGAGE);
-            messageRequest.setSmsSentOn(LocalDateTime.now(ZoneOffset.UTC));
+            messageRequest.setSmsSentOn(Instant.now());
             messageRequest.setUpdateMsgReq(null);
             validateMsgReqAndThrowException(messageRequest);
             msgProducer.postInsertMsgToKafka(messageRequest, tenantId);
@@ -169,9 +172,9 @@ public class MessageController {
     public ResponseEntity<MtAdapterMsgResWrapper> sendSmsForMtAdapter(@RequestBody @Valid MtAdapterMsgReq request,
                                                                       @RequestHeader("tenantId") String tenantId,
                                                                       @RequestHeader("apiKey") String apiKey) {
-        UserEntity userEntity = userRepository.findById(tenantId)
+        UserAccountEntity userAccountEntity = userRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("tenantId", "tenantId -" + tenantId + " not found "));
-        userEntity.getUserApiKeys().stream()
+        userAccountEntity.getUserApiKeys().stream()
                 .filter(aKey -> apiKey.equalsIgnoreCase(aKey.getApiKey()) && aKey.isActiveFlag())
                 .findFirst()
                 .orElseThrow(() -> new AuthenticationException("apiKey", " apiKey - " + apiKey + " is not valid for TenantId - " + tenantId));
@@ -200,8 +203,8 @@ public class MessageController {
             messageRequest.setKafkaMsgType(KafkaMsgType.INSERT_MSG);
             messageRequest.setMsgStatus(MsgStatus.CREATED);
             messageRequest.setCrmMsgType(CRMType.MT_ADAPTER);
-            messageRequest.setSmsSentOn(LocalDateTime.now(ZoneOffset.UTC));
-            messageRequest.setSmsLength(request.getMessage().length());
+            messageRequest.setSmsSentOn(Instant.now());
+            messageRequest.setSmsLength(getLengthIgnoringNewlines(request.getMessage()));
             messageRequest.setCredits(getUnits(request.getMessage(), messageRequest.getMessageType()));
             messageRequest.setUpdateMsgReq(null);
             boolean isNotValid = validateMsgReqWithoutThrowingException(messageRequest);
@@ -216,7 +219,7 @@ public class MessageController {
                 mtAdapterMsgRes.setLength(messageRequest.getSmsLength());
                 mtAdapterMsgRes.setMobile(to);
                 mtAdapterMsgRes.setStatus("AWAITING-DLR");
-                mtAdapterMsgRes.setSubmitted_at("2025-04-15 16:26:59");
+                mtAdapterMsgRes.setSubmitted_at(messageRequest.getSmsSentOn());
                 mtAdapterMsgRes.setUnits(messageRequest.getCredits());
 
                 data.add(mtAdapterMsgRes);
@@ -234,15 +237,15 @@ public class MessageController {
     public ResponseEntity<MtAdapterTemplateMsgRespWrapper> sendSmsAsPerTemplate(@RequestBody @Valid MtAdapterTemplateMsgReq request,
                                                                                 @RequestHeader("tenantId") String tenantId,
                                                                                 @RequestHeader("apiKey") String apiKey) {
-        UserEntity userEntity = userRepository.findById(tenantId)
+        UserAccountEntity userAccountEntity = userRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("tenantId", "tenantId -" + tenantId + " not found "));
-        userEntity.getUserApiKeys().stream()
+        userAccountEntity.getUserApiKeys().stream()
                 .filter(aKey -> apiKey.equalsIgnoreCase(aKey.getApiKey()) && aKey.isActiveFlag())
                 .findFirst()
                 .orElseThrow(() -> new AuthenticationException("apiKey", " apiKey - " + apiKey + " is not valid for TenantId - " + tenantId));
         List<String> toList = request.getRecipient().getTo();
-        String msgGroupId = generateUniqueMsgGroupId();
         MtAdapterTemplateMsgRespWrapper response = new MtAdapterTemplateMsgRespWrapper();
+        String msgGroupId=generateUniqueMsgGroupId();
         List<MtAdapterTemplateMsgResp> data = new ArrayList<>();
         TemplateEntity templateEntity = templateRepository.findByName(request.getAlias()).
                 orElse(null);
@@ -261,17 +264,17 @@ public class MessageController {
                 messageRequest.setBody(renderTemplateBodyWithData(templateEntity.getTemplateBody(), request.getData()));
                 messageRequest.setTemplateId(templateEntity.getTemplateId());
                 messageRequest.setEntityId(templateEntity.getSender().getEntityId());
-//                messageRequest.setMetadata();
-                messageRequest.setCustomId(request.getMeta().getForeign_id());
+////                messageRequest.setMetadata();
+//               // messageRequest.setCustomId(request.getMeta().getForeign_id());
                 messageRequest.setFlash(request.getMeta().getFlash() == 1 ? true : false);
                 messageRequest.setWebhookId((request.getMeta().getWebhook_id() != null && !request.getMeta().getWebhook_id().isBlank()) ? request.getMeta().getWebhook_id() : null);
 
                 messageRequest.setKafkaMsgType(KafkaMsgType.INSERT_MSG);
                 messageRequest.setMsgStatus(MsgStatus.CREATED);
                 messageRequest.setCrmMsgType(CRMType.MT_ADAPTER);
-                messageRequest.setSmsSentOn(LocalDateTime.now(ZoneOffset.UTC));
+                messageRequest.setSmsSentOn(Instant.now());
 
-                messageRequest.setSmsLength(messageRequest.getBody().length());
+                messageRequest.setSmsLength(getLengthIgnoringNewlines(messageRequest.getBody()));
                 messageRequest.setCredits(getUnits(messageRequest.getBody(), messageRequest.getMessageType()));
                 messageRequest.setUpdateMsgReq(null);
                 boolean isNotValid = validateMsgReqWithoutThrowingException(messageRequest);
@@ -279,13 +282,13 @@ public class MessageController {
                     msgProducer.postInsertMsgToKafka(messageRequest, tenantId);
                     MtAdapterTemplateMsgResp mtAdapterTemplateMsgResp = new MtAdapterTemplateMsgResp();
                     mtAdapterTemplateMsgResp.setId(messageRequest.getMsgId());
-                    mtAdapterTemplateMsgResp.setChannel("0.023");
+                    mtAdapterTemplateMsgResp.setChannel("sms");
                     mtAdapterTemplateMsgResp.setFrom(messageRequest.getFrom());
                     mtAdapterTemplateMsgResp.setTo(messageRequest.getTo());
                     mtAdapterTemplateMsgResp.setCredits(messageRequest.getCredits());
                     mtAdapterTemplateMsgResp.setForeign_id(request.getMeta().getForeign_id());
                     mtAdapterTemplateMsgResp.setStatus("AWAITING-DLR");
-                    mtAdapterTemplateMsgResp.setCreated_at("2025-04-15 16:26:59");
+                    mtAdapterTemplateMsgResp.setCreated_at(messageRequest.getSmsSentOn());
 
                     data.add(mtAdapterTemplateMsgResp);
                 }
@@ -323,21 +326,29 @@ public class MessageController {
         return uuid;
     }
 
-    private static int getUnits(String msgBody, MessageType messageType) {
+    public int getLengthIgnoringNewlines(String input) {
+        if (input == null) {
+            return 0;
+        }
+        return input.replace("\n", "").length();
+    }
+
+    public int getUnits(String msgBody, MessageType messageType) {
         if (msgBody == null || msgBody.equalsIgnoreCase(""))
             return 1;
         int unit;
+        int msgLength = getLengthIgnoringNewlines(msgBody);
         switch (messageType) {
-            case N -> unit = (msgBody.length() <= 160) ? 1 : (int) Math.ceil((double) msgBody.length() / 153);
-            case U -> unit = (msgBody.length() <= 70) ? 1 : (int) Math.ceil((double) msgBody.length() / 67);
+            case N -> unit = (msgLength <= 160) ? 1 : (int) Math.ceil((double) msgLength / 153);
+            case U -> unit = (msgLength <= 70) ? 1 : (int) Math.ceil((double) msgLength / 67);
             case A -> {
                 boolean isNonAscii = msgBody.chars().anyMatch(c -> c >= 128);
                 if (!isNonAscii) {
                     // ASCII logic
-                    unit = (msgBody.length() <= 160) ? 1 : (int) Math.ceil((double) msgBody.length() / 153);
+                    unit = (msgLength <= 160) ? 1 : (int) Math.ceil((double) msgLength / 153);
                 } else {
                     // Non-ASCII logic
-                    unit = (msgBody.length() <= 70) ? 1 : (int) Math.ceil((double) msgBody.length() / 67);
+                    unit = (msgLength <= 70) ? 1 : (int) Math.ceil((double) msgLength / 67);
                 }
             }
             default -> unit = 0;

@@ -16,8 +16,8 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "shorten_url")
-public class ShortenUrlEntity {
+@Table(name = "shorten_url_registry")
+public class ShortenUrlRegistryEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
