@@ -40,11 +40,11 @@ public class MsgRequestsProducer {
 
         kafkaTemplate.send(record);
         log.info(" msgId {} with msgStatus {} for tenantId {} pushed into kafka", messageRequest.getMsgId(), messageRequest.getMsgStatus(), tenantId);
-        try {
-            log.info("message : {}", objectMapper.writeValueAsString(messageRequest));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+//        try {
+//            log.info("message : {}", objectMapper.writeValueAsString(messageRequest));
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
     }
 
 }
